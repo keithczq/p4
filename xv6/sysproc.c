@@ -89,3 +89,27 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int sys_setpri(void) {
+
+}
+
+int sys_getpri(void)
+{
+
+}
+
+int sys_fork2(void)
+{
+
+}
+
+int sys_getpinfo(void)
+{
+    struct pstat* curr_pstat;
+    if (argptr(0, (char**)&curr_pstat, sizeof(struct pstat)) < 0) {
+        return -1;
+    }
+    getpinfo(curr_pstat);
+    return 0;
+}
