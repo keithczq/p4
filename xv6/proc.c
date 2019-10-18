@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#define MAXLEVEL 3;
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -329,24 +331,30 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    int i = MAXLEVEL;
+    while (i > -1) {
+      for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+          if (p->state != RUNNABLE && p->priority != i)
+              continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+          // Switch to chosen process.  It is the process's job
+          // to release ptable.lock and then reacquire it
+          // before jumping back to us.
+          c->proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+          swtch(&(c->scheduler), p->context);
+          switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+          goto scheduled;
+      }
+      i--;
     }
+      scheduled:
     release(&ptable.lock);
 
   }
@@ -526,4 +534,51 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+setpri(int PID, int pri)
+{
+    //You should check that both PID and pri are valid; if they are not, return -1.
+    if (pri < 0 || pri > 3) return -1;
+
+    struct proc *p;
+    for (int i = 0; i < NPROC; i++) {
+        p = &ptable.proc[i];
+        if (p->pid == PID) {
+            flag = 1;
+            p->priority = pri;
+
+            //When the priority of a process is set,
+            // the process should go to the end of the queue at that
+            // level and should be given a new time-slice of the correct length.
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int
+getpri(int PID)
+{
+    //This returns the current priority of the specified PID.
+    // If the PID is not valid, it returns -1.
+    return -1;
+}
+
+int
+fork2(int pri)
+{
+    //except the newly created process should begin at the specified priority.
+    //  If pri is not a valid priority, fork2() should return -1
+    return -1;
+}
+
+int
+getpinfo(struct pstat *ps)
+{
+    //Because your MLQ implementation is all in the kernel level, you need to
+    // extract useful information for each process by creating this system call
+    // so as to better test whether your implementation works as expected.
+    return -1;
 }

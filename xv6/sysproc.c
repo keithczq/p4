@@ -90,16 +90,19 @@ sys_uptime(void)
   return xticks;
 }
 
-int sys_setpri(void) {
+int
+sys_setpri(void) {
 
 }
 
-int sys_getpri(void)
+int
+sys_getpri(void)
 {
 
 }
 
-int sys_fork2(void)
+int
+sys_fork2(void)
 {
 
 }

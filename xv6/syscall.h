@@ -20,3 +20,7 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+#define SYS_uptime 22
+#define SYS_setpri 23
+#define SYS_getpri 24
+#define SYS_fork2  25
