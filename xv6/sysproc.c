@@ -92,13 +92,22 @@ sys_uptime(void)
 
 int
 sys_setpri(void) {
+    int pid;
+    int priority;
 
+    if(argint(0, &pid) < 0 || argint(1, &priority) < 0)
+        return -1;
+    return setpri(pid, priority);
 }
 
 int
 sys_getpri(void)
 {
+    int pid;
 
+    if(argint(0, &pid) < 0)
+        return -1;
+    return getpri(pid);
 }
 
 int
@@ -107,7 +116,8 @@ sys_fork2(void)
 
 }
 
-int sys_getpinfo(void)
+int
+sys_getpinfo(void)
 {
     struct pstat* curr_pstat;
     if (argptr(0, (char**)&curr_pstat, sizeof(struct pstat)) < 0) {

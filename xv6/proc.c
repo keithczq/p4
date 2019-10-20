@@ -539,19 +539,23 @@ procdump(void)
 int
 setpri(int PID, int pri)
 {
-    //You should check that both PID and pri are valid; if they are not, return -1.
+    //Check priority
     if (pri < 0 || pri > 3) return -1;
 
+    //Check valid PID and set priority if present
     struct proc *p;
     for (int i = 0; i < NPROC; i++) {
         p = &ptable.proc[i];
         if (p->pid == PID) {
-            flag = 1;
+            acquire(&ptable.lock); //TODO: check if acquire and release should be at diff place
             p->priority = pri;
 
+            //TODO: move to end of queue
             //When the priority of a process is set,
             // the process should go to the end of the queue at that
             // level and should be given a new time-slice of the correct length.
+
+            release(&ptable.lock);
             return 0;
         }
     }
@@ -561,17 +565,64 @@ setpri(int PID, int pri)
 int
 getpri(int PID)
 {
-    //This returns the current priority of the specified PID.
-    // If the PID is not valid, it returns -1.
+
+    struct proc *p;
+    for (int i = 0; i < NPROC; i++) {
+        p = &ptable.proc[i];
+        if (p->pid == PID) {
+            return p->priority;
+        }
+    }
     return -1;
 }
 
 int
 fork2(int pri)
 {
-    //except the newly created process should begin at the specified priority.
-    //  If pri is not a valid priority, fork2() should return -1
-    return -1;
+    //Check priority
+    if (pri < 0 || pri > 3) return -1;
+
+    int i, pid;
+    struct proc *np;
+    struct proc *curproc = myproc();
+
+    // Allocate process.
+    if((np = allocproc()) == 0){
+        return -1;
+    }
+
+    // Copy process state from proc.
+    if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
+        kfree(np->kstack);
+        np->kstack = 0;
+        np->state = UNUSED;
+        return -1;
+    }
+    np->sz = curproc->sz;
+    np->parent = curproc;
+    *np->tf = *curproc->tf;
+
+    np->priority = pri; //set priority of child process to specified value
+
+    // Clear %eax so that fork returns 0 in the child.
+    np->tf->eax = 0;
+
+    for(i = 0; i < NOFILE; i++)
+        if(curproc->ofile[i])
+            np->ofile[i] = filedup(curproc->ofile[i]);
+    np->cwd = idup(curproc->cwd);
+
+    safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+    pid = np->pid;
+
+    acquire(&ptable.lock);
+
+    np->state = RUNNABLE;
+
+    release(&ptable.lock);
+
+    return pid;
 }
 
 int
@@ -580,5 +631,31 @@ getpinfo(struct pstat *ps)
     //Because your MLQ implementation is all in the kernel level, you need to
     // extract useful information for each process by creating this system call
     // so as to better test whether your implementation works as expected.
+    struct proc* p;
+    acquire(&ptable.lock);
+    for (int i = 0; i < NPROC; i++) {
+        p = &ptable.proc[i];
+
+        ps->inuse[i] = (p->state != UNUSED);
+        ps->pid[i] = p->pid;
+        ps->priority[i] = p->priority;
+        ps->state[i] = p->state;
+        //TODO: fill ticks array
+//        for (pi = 0; pi < p->priority; pi++) {
+//            ps->ticks[i][pi] = tick_quota[pi];
+//        }
+//        ps->ticks[i][p->priority] = p->ticks_used[p->priority];
+//        for (pi = p->priority + 1; pi < NPRIOR; pi++) {
+//            ps->ticks[i][pi] = 0;
+//        }
+        //TODO: fill qtail array
+    }
+    release(&ptable.lock);
     return -1;
 }
+//int inuse[NPROC]; // whether this slot of the process table is in use (1 or 0)
+//int pid[NPROC];   // PID of each process
+//int priority[NPROC];  // current priority level of each process (0-3)
+//enum procstate state[NPROC];  // current state (e.g., SLEEPING or RUNNABLE) of each process
+//int ticks[NPROC][NLAYER];  // total num ticks each process has accumulated at each priority
+//int qtail[NPROC][4];
