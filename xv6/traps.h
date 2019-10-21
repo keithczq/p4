@@ -1,4 +1,4 @@
-2// x86 trap and interrupt constants.
+// x86 trap and interrupt constants.
 
 // Processor-defined:
 #define T_DIVIDE         0      // divide error

@@ -113,7 +113,11 @@ sys_getpri(void)
 int
 sys_fork2(void)
 {
+    int pri;
 
+    if(argint(0, &pri) < 0)
+        return -1;
+    return fork2(pri);
 }
 
 int

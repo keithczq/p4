@@ -23,6 +23,7 @@ extern void trapret(void);
 int ticksLimit[] = {20, 16, 12, 8};
 
 static void wakeup1(void *chan);
+int setpri(int PID, int pri);
 
 void
 pinit(void)
@@ -395,8 +396,8 @@ updateAndCheckTicks() {
 
     myproc()->ticksUsedAtLevel[myproc()->priority]++;
     myproc()->ticksUsed++;
-    if (myproc()->priority < NLAYER - 1 && myproc()->ticks >= ticksLimit[myproc()->priority]) {
-        myproc()->ticks = 0;
+    if (myproc()->priority < NLAYER - 1 && myproc()->ticksUsed >= ticksLimit[myproc()->priority]) {
+        myproc()->ticksUsed = 0;
         setpri(myproc()->pid, myproc()->priority);
     }
 }
@@ -479,11 +480,11 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
-      p->state = RUNNABLE;
-    //TODO: correct?
-    setpri(p->pid, p->priority);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if (p->state == SLEEPING && p->chan == chan)
+          p->state = RUNNABLE;
+      setpri(p->pid, p->priority); //TODO: correct?
+  }
 }
 
 // Wake up all processes sleeping on chan.
@@ -561,8 +562,7 @@ setpri(int PID, int pri)
     if (pri < 0 || pri > 3) return -1;
 
     //Check valid PID and set priority if present
-    struct proc *currProc;
-    struct proc *foundProc;
+    struct proc *currProc, *foundProc, *nextProc;
     int index = 0;
     for (int i = 0; i < NPROC; i++) {
         currProc = &ptable.proc[i];
@@ -578,23 +578,22 @@ setpri(int PID, int pri)
     //Code block will move the process that is being updated to
     //the back of the ptable
     found:
-    struct proc *nextProc;
     for (int j = index; j < NPROC; j++) {
         //If we reach the end of array, just simply set last index to
         if (j == (NPROC - 1)) {
-            &ptable.proc[NPROC] = foundProc;
+            ptable.proc[j] = *foundProc;
             break;
         }
         currProc = &ptable.proc[j];
         nextProc = &ptable.proc[j+1];
         //Found the last allocated process in ptable
         if (nextProc->state == UNUSED) {
-            &ptable.proc[j] = foundProc;
+            ptable.proc[j] = *foundProc;
             foundProc->qtail[foundProc->priority]++;
         }
         //If not, move next process to current process
         else {
-            &ptable.proc[j] = nextProc;
+            ptable.proc[j] = *nextProc;
         }
     }
     return 0;
