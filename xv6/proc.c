@@ -20,6 +20,8 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
+int ticksLimit[] = {20, 16, 12, 8};
+
 static void wakeup1(void *chan);
 
 void
@@ -149,6 +151,8 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
+  p->priority = MAXLEVEL; //TODO: check correct?
+  p->qtail[p->priority]++;
 
   release(&ptable.lock);
 }
@@ -386,12 +390,24 @@ sched(void)
   mycpu()->intena = intena;
 }
 
+void
+updateAndCheckTicks() {
+
+    myproc()->ticksUsedAtLevel[myproc()->priority]++;
+    myproc()->ticksUsed++;
+    if (myproc()->priority < NLAYER - 1 && myproc()->ticks >= ticksLimit[myproc()->priority]) {
+        myproc()->ticks = 0;
+        setpri(myproc()->pid, myproc()->priority);
+    }
+}
+
 // Give up the CPU for one scheduling round.
 void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
+  updateAndCheckTicks();
   sched();
   release(&ptable.lock);
 }
@@ -466,6 +482,8 @@ wakeup1(void *chan)
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan)
       p->state = RUNNABLE;
+    //TODO: correct?
+    setpri(p->pid, p->priority);
 }
 
 // Wake up all processes sleeping on chan.
@@ -543,23 +561,43 @@ setpri(int PID, int pri)
     if (pri < 0 || pri > 3) return -1;
 
     //Check valid PID and set priority if present
-    struct proc *p;
+    struct proc *currProc;
+    struct proc *foundProc;
+    int index = 0;
     for (int i = 0; i < NPROC; i++) {
-        p = &ptable.proc[i];
-        if (p->pid == PID) {
-            acquire(&ptable.lock); //TODO: check if acquire and release should be at diff place
-            p->priority = pri;
-
-            //TODO: move to end of queue
-            //When the priority of a process is set,
-            // the process should go to the end of the queue at that
-            // level and should be given a new time-slice of the correct length.
-
-            release(&ptable.lock);
-            return 0;
+        currProc = &ptable.proc[i];
+        if (currProc->pid == PID) {
+            currProc->priority = pri;
+            index = i;
+            foundProc = currProc;
+            goto found;
         }
     }
     return -1;
+
+    //Code block will move the process that is being updated to
+    //the back of the ptable
+    found:
+    struct proc *nextProc;
+    for (int j = index; j < NPROC; j++) {
+        //If we reach the end of array, just simply set last index to
+        if (j == (NPROC - 1)) {
+            &ptable.proc[NPROC] = foundProc;
+            break;
+        }
+        currProc = &ptable.proc[j];
+        nextProc = &ptable.proc[j+1];
+        //Found the last allocated process in ptable
+        if (nextProc->state == UNUSED) {
+            &ptable.proc[j] = foundProc;
+            foundProc->qtail[foundProc->priority]++;
+        }
+        //If not, move next process to current process
+        else {
+            &ptable.proc[j] = nextProc;
+        }
+    }
+    return 0;
 }
 
 int
@@ -633,14 +671,17 @@ getpinfo(struct pstat *ps)
     // so as to better test whether your implementation works as expected.
     struct proc* p;
     acquire(&ptable.lock);
-    for (int i = 0; i < NPROC; i++) {
+    for(int i = 0; i < NPROC; i++) {
         p = &ptable.proc[i];
 
         ps->inuse[i] = (p->state != UNUSED);
         ps->pid[i] = p->pid;
         ps->priority[i] = p->priority;
         ps->state[i] = p->state;
-        //TODO: fill ticks array
+        //TODO: check if ticks filled correctly
+        for(int j = 0; j < NLAYER; j++) {
+            ps->ticks[i][j] += p->ticksUsedAtLevel[j];
+        }
 //        for (pi = 0; pi < p->priority; pi++) {
 //            ps->ticks[i][pi] = tick_quota[pi];
 //        }
@@ -648,14 +689,11 @@ getpinfo(struct pstat *ps)
 //        for (pi = p->priority + 1; pi < NPRIOR; pi++) {
 //            ps->ticks[i][pi] = 0;
 //        }
-        //TODO: fill qtail array
+        //TODO: check if qtail filled correctly
+        for (int k = 0; k < NLAYER; k++) {
+            ps->qtail[i][k] += p->qtail[k];
+        }
     }
     release(&ptable.lock);
     return -1;
 }
-//int inuse[NPROC]; // whether this slot of the process table is in use (1 or 0)
-//int pid[NPROC];   // PID of each process
-//int priority[NPROC];  // current priority level of each process (0-3)
-//enum procstate state[NPROC];  // current state (e.g., SLEEPING or RUNNABLE) of each process
-//int ticks[NPROC][NLAYER];  // total num ticks each process has accumulated at each priority
-//int qtail[NPROC][4];
